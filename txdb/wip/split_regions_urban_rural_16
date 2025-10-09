@@ -1,0 +1,42 @@
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN 
+        SELECT DISTINCT region, type
+        FROM costar_txv5_joined
+        WHERE region IS NOT NULL 
+          AND type IN ('urban','rural')
+    LOOP
+        IF r.type = 'urban' THEN
+            EXECUTE format(
+                'DROP TABLE IF EXISTS costar_txv5_joined_region%s_%s;
+                 CREATE TABLE costar_txv5_joined_region%s_%s AS
+                 SELECT *
+                 FROM costar_txv5_joined
+                 WHERE region = %L
+                   AND type = %L
+                   AND (urban_elderly = 16 OR urban_general = 16);',
+                r.region, r.type,        -- for DROP
+                r.region, r.type,        -- for CREATE
+                r.region, r.type         -- for WHERE clause
+            );
+
+        ELSIF r.type = 'rural' THEN
+            EXECUTE format(
+                'DROP TABLE IF EXISTS costar_txv5_joined_region%s_%s;
+                 CREATE TABLE costar_txv5_joined_region%s_%s AS
+                 SELECT *
+                 FROM costar_txv5_joined
+                 WHERE region = %L
+                   AND type = %L
+                   AND (rural_elderly = 16 OR rural_general = 16);',
+                r.region, r.type,        -- for DROP
+                r.region, r.type,        -- for CREATE
+                r.region, r.type         -- for WHERE clause
+            );
+        END IF;
+
+        RAISE NOTICE 'Created table for region % and type %', r.region, r.type;
+    END LOOP;
+END$$;
