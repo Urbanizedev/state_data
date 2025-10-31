@@ -1,42 +1,52 @@
 DO $$
 DECLARE
-    r RECORD;
+    src_table   text := 'costar_txv5_joined';           -- ✅ CHANGE HERE
+    out_prefix  text := 'costar_txv5_joined_region';    -- ✅ CHANGE HERE
+    r           RECORD;
 BEGIN
     FOR r IN 
-        SELECT DISTINCT region, type
-        FROM costar_txv5_joined
-        WHERE region IS NOT NULL 
-          AND type IN ('urban','rural')
+        EXECUTE format(
+            'SELECT DISTINCT region, type
+             FROM %I
+             WHERE region IS NOT NULL 
+               AND type IN (''urban'', ''rural'')',
+            src_table
+        )
     LOOP
-        IF r.type = 'urban' THEN
-            EXECUTE format(
-                'DROP TABLE IF EXISTS costar_txv5_joined_region%s_%s;
-                 CREATE TABLE costar_txv5_joined_region%s_%s AS
-                 SELECT *
-                 FROM costar_txv5_joined
-                 WHERE region = %L
-                   AND type = %L
-                   AND (urban_elderly = 16 OR urban_general = 16);',
-                r.region, r.type,        -- for DROP
-                r.region, r.type,        -- for CREATE
-                r.region, r.type         -- for WHERE clause
-            );
+        -- Build dynamic output table name
+        -- e.g.  costar_txv5_joined_region3_urban
+        --       costar_txv5_joined_region10_rural
+        DECLARE
+            out_table text := format('%s%s_%s', out_prefix, r.region, r.type);
+        BEGIN
+            -- Drop existing
+            EXECUTE format('DROP TABLE IF EXISTS %I', out_table);
 
-        ELSIF r.type = 'rural' THEN
-            EXECUTE format(
-                'DROP TABLE IF EXISTS costar_txv5_joined_region%s_%s;
-                 CREATE TABLE costar_txv5_joined_region%s_%s AS
-                 SELECT *
-                 FROM costar_txv5_joined
-                 WHERE region = %L
-                   AND type = %L
-                   AND (rural_elderly = 16 OR rural_general = 16);',
-                r.region, r.type,        -- for DROP
-                r.region, r.type,        -- for CREATE
-                r.region, r.type         -- for WHERE clause
-            );
-        END IF;
+            -- Build filter clause
+            IF r.type = 'urban' THEN
+                EXECUTE format(
+                    'CREATE TABLE %I AS
+                     SELECT *
+                     FROM %I
+                     WHERE region = %L
+                       AND type = %L
+                       AND (urban_elderly = 16 OR urban_general = 16)',
+                    out_table, src_table, r.region, r.type
+                );
 
-        RAISE NOTICE 'Created table for region % and type %', r.region, r.type;
+            ELSIF r.type = 'rural' THEN
+                EXECUTE format(
+                    'CREATE TABLE %I AS
+                     SELECT *
+                     FROM %I
+                     WHERE region = %L
+                       AND type = %L
+                       AND (rural_elderly = 16 OR rural_general = 16)',
+                    out_table, src_table, r.region, r.type
+                );
+            END IF;
+
+            RAISE NOTICE 'Created %', out_table;
+        END;
     END LOOP;
-END$$;
+END $$;
